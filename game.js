@@ -439,7 +439,7 @@
     '치열했던 배식대 대전의 승자는 {menu}!',
     '오늘 점심 확정: {menu} 되시겠습니다!',
     '{menu}, 전 레인을 뚫고 챔피언 등극!',
-    '12시 정각, 위장이 원한 건 결국 {menu}였다.',
+    '13시 정각, 위장이 원한 건 결국 {menu}였다.',
     '이변은 없었다 — {menu} 우승!',
     '동료들이 부러워할 선택, {menu}!',
     '맛있게 드세요, 오늘의 챔피언 {menu}!',
@@ -571,7 +571,9 @@
       G.stats.retains++; G.stats.combo++;   // 콤보는 1(첫 챔피언)에서 시작 → 방어 시 2,3,4...
       if (G.stats.combo > G.stats.bestCombo) G.stats.bestCombo = G.stats.combo;
       var cb = G.stats.combo;
-      if (cb >= 4) say(m + ' 빨리 먹고싶다!!!');
+      if (cb >= 6) say(m + ' 매일 먹고싶어!!');
+      else if (cb === 5) say(m + ' 기다려!!!');
+      else if (cb === 4) say(m + ' 빨리 먹고싶다!!!');
       else if (cb === 3) say(m + '!! 질리지 않아!!!!');
       else say('찬양하라 갓 ' + m + '!!');   // cb === 2
       G.toast = { text: cb >= 3 ? ('방어 성공! x' + cb + ' 콤보') : '방어 성공!', color: '#ffe14d', t: 0 };
@@ -1100,6 +1102,45 @@
     }
   }
 
+  // 라운드가 진행될수록(라운드마다 1명씩) 주인공 뒤에서 함께 달리는 추격 무리.
+  // 플레이어보다 뒤(화면상 더 위쪽/작게)에 좌우로 퍼진 대열로 배치해 플레이어가 앞서가는 느낌을 준다.
+  var CHASER_OFFSETS = [
+    { dx: -20, dy: -3, s: 0.62 }, { dx: 20, dy: -3, s: 0.62 },
+    { dx: -33, dy: -9, s: 0.52 }, { dx: 33, dy: -9, s: 0.52 },
+    { dx: -12, dy: -13, s: 0.46 }, { dx: 12, dy: -13, s: 0.46 },
+    { dx: -42, dy: -17, s: 0.4 }, { dx: 42, dy: -17, s: 0.4 },
+  ];
+  var CHASER_PAL = [
+    { hair: '#3a2a1a', shirt: '#5a7fd6', low: '#241b2f' },
+    { hair: '#241b2f', shirt: '#ff9ab0', low: '#7b6d8d' },
+    { hair: '#7a4a2a', shirt: '#f5f5ef', low: '#46394f' },
+    { hair: '#0d0b1a', shirt: '#ffe14d', low: '#2e4a8f' },
+  ];
+  function drawChaserPerson(cx, footY, s, pal, phase) {
+    var frame = Math.floor(phase * 2) % 2;
+    var bob = -Math.abs(Math.sin(phase * Math.PI * 2)) * 1.2 * s;
+    var fy = footY + bob, top = fy - 11 * s;
+    bctx.globalAlpha = 0.3; bctx.fillStyle = '#241b2f';
+    bctx.beginPath(); bctx.ellipse(cx, footY, 3.5 * s, 1.2 * s, 0, 0, Math.PI * 2); bctx.fill(); bctx.globalAlpha = 1;
+    var lift = frame === 0 ? [-1, 0] : [0, -1];
+    px(cx - 2 * s, fy - 4 * s + lift[0] * s, 1.6 * s, 4 * s, pal.low);
+    px(cx + 0.4 * s, fy - 4 * s + lift[1] * s, 1.6 * s, 4 * s, pal.low);
+    px(cx - 2.2 * s, top + 2 * s, 4.4 * s, 5 * s, '#0d0b1a');
+    px(cx - 1.8 * s, top + 2 * s, 3.6 * s, 4.4 * s, pal.shirt);
+    px(cx - 1.8 * s, top, 3.6 * s, 3.6 * s, pal.hair);
+  }
+  function drawChasers() {
+    if (G.macro === 'CELEBRATION') return;
+    var n = Math.min(CHASER_OFFSETS.length, Math.max(0, G.roundIndex));
+    if (n <= 0) return;
+    var cx = G.runner.x + G.runner.lean, footY = PLAYER_Y;
+    for (var i = 0; i < n; i++) {
+      var o = CHASER_OFFSETS[i];
+      var phase = (G.runner.phase + i * 0.23) % 1;
+      drawChaserPerson(cx + o.dx, footY + o.dy, o.s, CHASER_PAL[i % CHASER_PAL.length], phase);
+    }
+  }
+
   function drawRunner() {
     var frame = Math.floor(G.runner.phase * 4) % 4;
     var bobAmp = 2 + clamp((G.speedMult - 1) * 0.5, 0, 2);   // 빠를수록 상하 흔들림 커짐
@@ -1271,18 +1312,53 @@
   }
 
   function drawFinish() {
-    // 구내식당 문 (완주 존). 확보된 도착 연출 시간(FINISH 구간) 전체에 걸쳐 서서히 다가온다.
+    // 구내식당 배식구 (완주 존). 확보된 도착 연출 시간(FINISH 구간) 전체에 걸쳐 서서히 다가온다.
     var p = clamp((G.clock - RACE_ROUNDS_END) / (FINISH_END - RACE_ROUNDS_END), 0, 1);
     var cy = lerp(74, PLAYER_Y - 6, easeOutQuad(p));
     var hw = roadHalfWidth(cy);
     var s = roadHalfWidth(cy) / HW_PLAYER;
-    // 체커 결승선
+
+    // 체커 결승선(바닥)
     var w = hw * 2, x0 = VPX - hw, h = 6 * s + 2;
     for (var i = 0; i < 8; i++) px(x0 + i * w / 8, cy, w / 8, h, i % 2 ? '#0d0b1a' : '#f5f5ef');
-    // 식당 건물
-    px(VPX - hw * 1.1, cy - 30 * s, hw * 2.2, 30 * s, '#1f7a4d');
-    px(VPX - hw * 0.7, cy - 22 * s, hw * 1.4, 12 * s, '#f5f5ef');
-    OVERLAY.push({ text: '구내식당', bx: VPX, by: cy - 16 * s, size: Math.max(5, 7 * s), color: '#1f7a4d', maxW: hw * 1.3 });
+
+    // 배식구 카운터(테이블): 스테인리스 상판 + 우드 하단 프레임 + 유리 가림막
+    var cw = hw * 2.3, cx0 = VPX - cw / 2, counterTop = cy - 16 * s, counterH = 10 * s;
+    bctx.globalAlpha = 0.3; px(cx0 + cw * 0.06, counterTop - 13 * s, cw * 0.88, 13 * s, '#9db9d0'); bctx.globalAlpha = 1;  // 스니즈가드 유리
+    px(cx0 - 1, counterTop - 1, cw + 2, counterH + 2, '#0d0b1a');
+    px(cx0, counterTop, cw, counterH * 0.35, '#cfd3d6');                    // 스테인리스 상판
+    px(cx0, counterTop, cw, Math.max(1, s), '#ffffff');                     // 상판 하이라이트
+    px(cx0, counterTop + counterH * 0.35, cw, counterH * 0.65, '#7a4a2a');  // 우드 하단
+    px(cx0, counterTop + counterH * 0.35, cw, Math.max(1, s), '#5c3a20');
+
+    // 간판(초록 바탕 + 우드 프레임)
+    var signW = hw * 2.0, signH = 12 * s, signY = counterTop - 13 * s - signH - 2 * s;
+    px(VPX - signW / 2 - 1, signY - 1, signW + 2, signH + 2, '#7a4a2a');
+    px(VPX - signW / 2, signY, signW, signH, '#1f7a4d');
+    px(VPX - signW / 2, signY, signW, Math.max(1, s), '#3fae6b');
+    OVERLAY.push({ text: '구내식당', bx: VPX, by: signY + signH / 2, size: Math.max(5, 7 * s), color: '#f5f5ef', maxW: signW * 0.9, outline: 0.16 });
+
+    // 김이 나는 그릇(테이블 위) — 중앙은 다가올수록 캐릭터에 가려지므로 좌우로 배치해 항상 보이게
+    var bowlY = counterTop - Math.max(1, s);
+    drawSteamingBowl(VPX - cw * 0.28, bowlY, s * 0.9);
+    drawSteamingBowl(VPX + cw * 0.28, bowlY, s * 0.9);
+  }
+
+  function drawSteamingBowl(cx, tableY, s) {
+    var bw = 10 * s, bh = 5 * s, bx0 = cx - bw / 2, by0 = tableY - bh;
+    px(bx0 - 1, by0 - 1, bw + 2, bh + 2, '#0d0b1a');
+    px(bx0, by0, bw, bh, '#f5f5ef');
+    px(bx0, by0, bw, Math.max(1, s), '#ffffff');
+    px(bx0 + s, by0 + s, Math.max(1, bw - 2 * s), Math.max(1, bh - 2 * s), '#e2452b');   // 국물/메인 음식
+    // 위로 흔들리며 옅어지는 스팀 3갈래
+    var t = G.clock;
+    for (var k = -1; k <= 1; k++) {
+      var wob = Math.sin(t * 3 + k * 2) * 2 * s;
+      var topY = by0 - (8 + 4 * Math.abs(k)) * s + Math.sin(t * 2 + k) * s;
+      bctx.globalAlpha = 0.26 - Math.abs(k) * 0.06;
+      px(cx + k * 3 * s + wob, topY, Math.max(1, 2 * s), Math.max(1, 6 * s), '#ffffff');
+      bctx.globalAlpha = 1;
+    }
   }
 
   function drawParticles() {
@@ -1504,7 +1580,7 @@
     if (G.macro === 'FINISH' || (G.macro === 'RACE' && G.clock > RACE_ROUNDS_END - 0.5)) drawFinish();
 
     if (G.started && G.macro === 'RACE') drawCards();
-    if (G.macro !== 'CELEBRATION') drawRunner();
+    if (G.macro !== 'CELEBRATION') { drawChasers(); drawRunner(); }
     drawSpeedLines();
     drawParticles();
 
