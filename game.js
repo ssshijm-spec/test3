@@ -1417,22 +1417,21 @@
     }
   }
 
-  // 좌상단 코너에 표시(타이틀/세리머니 화면에서만 그 자리가 비어있어 충돌 없음)
+  // 우측 상단, 라운드 카운터 바로 아래 — 화면 상태와 무관하게 항상 표시
   function drawHallOfFame() {
     if (!HOF.loaded || !HOF.top.length) return;
-    var x = 5, y = 6;
-    OVERLAY.push({ text: '🏆 명예의 전당', bx: x, by: y, size: 6, color: '#ffe14d', align: 'left', outline: 0.18 });
+    var x = VW - 10, y = 26;
+    OVERLAY.push({ text: '🏆 명예의 전당', bx: x, by: y, size: 5.5, color: '#ffe14d', align: 'right', outline: 0.18 });
     for (var i = 0; i < HOF.top.length; i++) {
       var r = HOF.top[i];
       var menu = null;
       for (var j = 0; j < CFG.FOODS.length; j++) { if (CFG.FOODS[j].slug === r.slug) { menu = CFG.FOODS[j]; break; } }
       var label = (i + 1) + '위 ' + (menu ? menu.emoji + menu.name : r.slug) + ' ' + r.pct + '%';
-      OVERLAY.push({ text: label, bx: x, by: y + 9 + i * 8, size: 5, color: '#f5f5ef', align: 'left', maxW: 100, outline: 0.16 });
+      OVERLAY.push({ text: label, bx: x, by: y + 8 + i * 7.5, size: 4.5, color: '#f5f5ef', align: 'right', maxW: 100, outline: 0.16 });
     }
   }
 
   function drawTitleScreen() {
-    drawHallOfFame();
     // 상단 WemadePlay 로고 배너 (검정 워드마크 → 밝은 사인 패널 위에)
     if (LOGO.img) {
       var lw = 100, lh = lw * LOGO.img.height / LOGO.img.width;
@@ -1472,7 +1471,6 @@
     var t = G.clock - FINISH_END;
     // 딤 배경
     bctx.globalAlpha = 0.5; px(0, 0, VW, VH, '#0d0b1a'); bctx.globalAlpha = 1;
-    drawHallOfFame();
     OVERLAY.push({ text: '오늘의 우승 점심 메뉴', bx: VPX, by: 18, size: 10, color: '#ffe14d', outline: 0.16 });
     // 우승 카드 (라벨은 아래 히어로 텍스트로 대체 → noLabel)
     if (G.finalWinner) {
@@ -1514,6 +1512,9 @@
     if (G.started) drawDanger(Math.max(0, FINISH_END - G.clock));
 
     if (G.started && G.macro !== 'CELEBRATION') drawHUD();
+
+    // 점심메뉴 명예의 전당 — 화면 상태와 무관하게 항상(라운드 카운터 바로 아래) 표시
+    drawHallOfFame();
 
     // 상태별 화면(버퍼 픽셀 파트 + OVERLAY 텍스트 큐잉) — 반드시 블릿 이전
     if (!G.started) drawTitleScreen();
