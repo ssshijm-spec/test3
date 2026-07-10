@@ -21,7 +21,7 @@
 
   var INTRO_END = 3.0;
   var FINISH_DUR = 2.0;
-  var RC = Math.max(1, CFG.roundCount || 7);
+  var RC = Math.max(1, CFG.roundCount || 9);
   // 라운드 길이 = (완주시간 - 인트로 - 완주연출) / 라운드수. raceSeconds 를 키우면 라운드가 길어져 메뉴 확인 시간이 늘어난다.
   var RLEN = Math.max(4, ((CFG.raceSeconds || 40) - INTRO_END - FINISH_DUR) / RC);
   var RACE_ROUNDS_END = INTRO_END + RC * RLEN;   // 라운드 종료
@@ -541,8 +541,8 @@
       if (G.stats.combo > G.stats.bestCombo) G.stats.bestCombo = G.stats.combo;
       var cb = G.stats.combo;
       if (cb >= 4) say(m + ' 빨리 먹고싶다!!!');
-      else if (cb === 3) say(m + '은 질리지 않아!!!!');
-      else say('점심엔 이만한 ' + m + '이 없지');   // cb === 2
+      else if (cb === 3) say(m + '!! 질리지 않아!!!!');
+      else say('찬양하라 갓 ' + m + '!!');   // cb === 2
       G.toast = { text: cb >= 3 ? ('방어 성공! x' + cb + ' 콤보') : '방어 성공!', color: '#ffe14d', t: 0 };
       Audio.sfx(cb >= 3 ? 'comboUp' : 'championRetain');
       spawnParticles(cx, cy, 10, ['#ffe14d', '#c79a2e']);
@@ -552,7 +552,7 @@
         G.stats.upgrades++; say(m + '이 더 맛있겠는데?');
         G.toast = { text: '역전! 새 챔피언', color: '#3fae6b', t: 0 }; addShake(5, 0.18);
       } else {      // 첫 선택
-        say('역시 점심엔 ' + m + '지');
+        say('역시 점심엔 ' + m + '!');
         G.toast = { text: '첫 메뉴 등극!', color: '#3fae6b', t: 0 };
       }
       Audio.sfx(prev ? 'championUpgrade' : 'select');
