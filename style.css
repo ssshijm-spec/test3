@@ -1,0 +1,55 @@
+/* 점심 메뉴 레이스 - 셸 스타일. 게임 자체는 전부 canvas 에 렌더된다. */
+@font-face {
+  font-family: 'neodgm';
+  src: url('neodgm.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+:root { color-scheme: dark; }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #07060f;
+  /* 세로 비네트 + 은은한 무대 조명 */
+  background:
+    radial-gradient(120% 80% at 50% 12%, #211a3e 0%, #100c22 45%, #07060f 100%);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  overscroll-behavior: none;
+  font-family: system-ui, -apple-system, "Malgun Gothic", sans-serif;
+  /* 모바일: 롱프레스 콜아웃/선택/드래그 방지 (게임 조작을 방해하는 브라우저 기본 동작 제거) */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 노치/펀치홀 등 세이프 에어리어를 피해 중앙 배치 */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+#game {
+  /* 정수 배율로 렌더된 내부 버퍼를 분수 배율 CSS 크기로 확대해도 각지게 보이도록 유지 */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+  /* JS 가 뷰포트를 최대한 채우는 크기로 지정한다 (모바일 포함) */
+  background: #0d0b1a;
+  box-shadow:
+    0 0 0 2px rgba(0,0,0,0.6),
+    0 18px 60px -12px rgba(0,0,0,0.85),
+    0 0 120px -20px rgba(120, 90, 255, 0.25);
+  border-radius: 4px;
+  cursor: pointer;
+  touch-action: none;
+}

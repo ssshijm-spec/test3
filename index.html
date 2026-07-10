@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d0b1a" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🍚</text></svg>" />
+  <title>점심 메뉴 레이스</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="stage">
+    <canvas id="game" width="360" height="640"></canvas>
+  </div>
+  <!-- 로드 순서 중요: config(메뉴/튜닝값) -> game(엔진) -->
+  <script src="config.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
