@@ -24,16 +24,16 @@
   var RC = Math.max(1, CFG.roundCount || 9);
   // 라운드 길이 = (완주시간 - 인트로 - 완주연출) / 라운드수. raceSeconds 를 키우면 라운드가 길어져 메뉴 확인 시간이 늘어난다.
   var RLEN = Math.max(4, ((CFG.raceSeconds || 40) - INTRO_END - FINISH_DUR) / RC);
-  var RACE_ROUNDS_END = INTRO_END + RC * RLEN;   // 라운드 종료
-  var FINISH_END = RACE_ROUNDS_END + FINISH_DUR; // 완주(= raceSeconds)
+  // 마지막 라운드는 절반 길이로 빠르게 마무리 -> 그만큼 절약된 시간이 배식장소 도착(감속) 연출에 통째로 더해진다.
+  var NORMAL_ROUNDS = RC - 1;
+  var LAST_RLEN = RLEN * 0.5;
+  var RACE_ROUNDS_END = INTRO_END + NORMAL_ROUNDS * RLEN + LAST_RLEN;   // 라운드 종료(마지막 라운드 단축 반영)
+  var FINISH_END = INTRO_END + RC * RLEN + FINISH_DUR;                  // 완주 시각(= raceSeconds, 기존과 동일하게 유지)
   var CELE_LEN = 12.0;
 
-  // 라운드 내부 서브페이즈 경계(초). 대부분을 APPROACH(메뉴 확인 구간)에 배분한다.
-  var T_SPAWN = RLEN * 0.05;
-  var T_APPROACH = RLEN * 0.86;   // 메뉴가 다가오며 읽는 구간(가장 길게)
-  var T_PICK = RLEN * 0.90;       // 마지막 확정 여유
-  var T_RESOLVE = RLEN * 0.96;
-  var T_CARRY = RLEN;
+  // 라운드 내부 서브페이즈 경계 비율. 실제 초 단위 값은 라운드마다(마지막 라운드는 짧게) setupRound()에서
+  // G.tSpawn/G.tApproach/G.tPick/G.tResolve/G.tCarry 로 계산해 저장한다.
+  var SUB_SPAWN_FRAC = 0.05, SUB_APPROACH_FRAC = 0.86, SUB_PICK_FRAC = 0.90, SUB_RESOLVE_FRAC = 0.96;
 
   /* ------------------------------------------------------------------ */
   /* 팔레트 & 색 유틸                                                    */
@@ -387,6 +387,13 @@
     im.onload = function () { if (im.width > 0) LOGO.img = im; };
     im.src = 'wemadeplay.png';
   })();
+  // 3콤보 동반 강아지(Goldie). 4x10 그리드, 셀 32px. row1(0,32)~(96,32)=달리기 4프레임.
+  var DOG = { img: null };
+  (function () {
+    var im = new Image();
+    im.onload = function () { if (im.width > 0) DOG.img = im; };
+    im.src = 'Goldie_v02.png';
+  })();
 
   function loadMenus() {
     CFG.FOODS.forEach(function (m) {
@@ -430,6 +437,8 @@
     return {
       started: false, clock: 0, last: 0, paused: false,
       macro: 'INTRO', sub: 'SPAWN', roundIndex: -1, rel: 0,
+      roundLen: RLEN, tSpawn: RLEN * SUB_SPAWN_FRAC, tApproach: RLEN * SUB_APPROACH_FRAC, tPick: RLEN * SUB_PICK_FRAC, tResolve: RLEN * SUB_RESOLVE_FRAC, tCarry: RLEN,
+      coworkerBubbleShown: false, dogFrame: 0,
       runner: { targetLane: 1, x: laneX(PLAYER_Y, 1), phase: 0, lean: 0, lastFrame: -1 },
       champion: null,
       round: { cards: [], resolved: false, champLanePrev: -1 },
@@ -455,7 +464,7 @@
     G = freshState();
     G.started = true;
     G.last = performance.now();
-    setupRound(0);
+    setupRound(0, RC === 1 ? LAST_RLEN : RLEN);   // 라운드0은 항상 일반 길이(RC===1인 극단적 예외만 LAST_RLEN)
     Audio.startBgm();
     say('배고파 빨리 점심 먹으러 가야지!');
   }
@@ -464,7 +473,7 @@
     G = freshState();
     G.started = true;
     G.last = performance.now();
-    setupRound(0);
+    setupRound(0, RC === 1 ? LAST_RLEN : RLEN);   // 라운드0은 항상 일반 길이(RC===1인 극단적 예외만 LAST_RLEN)
     Audio.startBgm();
     say('배고파 빨리 점심 먹으러 가야지!');
   }
@@ -482,9 +491,15 @@
     }
     return out;
   }
-  function setupRound(ri) {
+  function setupRound(ri, curLen) {
     G.roundIndex = ri;
     G.round.resolved = false;
+    G.roundLen = curLen;
+    G.tSpawn = curLen * SUB_SPAWN_FRAC;
+    G.tApproach = curLen * SUB_APPROACH_FRAC;
+    G.tPick = curLen * SUB_PICK_FRAC;
+    G.tResolve = curLen * SUB_RESOLVE_FRAC;
+    G.tCarry = curLen;
     var cards = [];
     if (ri === 0 || !G.champion) {
       var three = pickDistinct(3, []);
@@ -632,12 +647,15 @@
     if (c < INTRO_END) { G.macro = 'INTRO'; return; }
     if (c < RACE_ROUNDS_END) {
       G.macro = 'RACE';
-      var ri = Math.floor((c - INTRO_END) / RLEN);
-      G.rel = (c - INTRO_END) - ri * RLEN;
-      if (ri !== G.roundIndex) setupRound(ri);
+      var normalEnd = INTRO_END + NORMAL_ROUNDS * RLEN;
+      var ri, rel, curLen;
+      if (c < normalEnd) { ri = Math.floor((c - INTRO_END) / RLEN); rel = (c - INTRO_END) - ri * RLEN; curLen = RLEN; }
+      else { ri = RC - 1; rel = c - normalEnd; curLen = LAST_RLEN; }
+      G.rel = rel;
+      if (ri !== G.roundIndex) setupRound(ri, curLen);
       var r = G.rel;
-      G.sub = r < T_SPAWN ? 'SPAWN' : r < T_APPROACH ? 'APPROACH' : r < T_PICK ? 'PICK' : r < T_RESOLVE ? 'RESOLVE' : 'CARRY';
-      if (!G.round.resolved && r >= T_PICK) commitRound();
+      G.sub = r < G.tSpawn ? 'SPAWN' : r < G.tApproach ? 'APPROACH' : r < G.tPick ? 'PICK' : r < G.tResolve ? 'RESOLVE' : 'CARRY';
+      if (!G.round.resolved && r >= G.tPick) commitRound();
       return;
     }
     if (c < FINISH_END) { G.macro = 'FINISH'; return; }
@@ -684,7 +702,13 @@
     var baseV = (G.macro === 'INTRO') ? 0.35 : speedMultAt(G.clock);
     // baseV(시간 곡선) + pickBoost(선택마다 누적) + surge(선택 순간 순간 가속). 시각 연출이므로 넉넉히 캡.
     G.speedMult = Math.min(4.2, baseV + G.pickBoost + Math.max(0, G.surge) * 0.9);
-    if (G.macro === 'FINISH') G.speedMult = Math.max(G.speedMult, 2.6);
+    // 최종 배식장소(구내식당) 도착 직전부터 서서히 감속 — 마지막 라운드가 단축되며 확보된 시간을
+    // 전부 이 감속 연출에 사용한다. RACE_ROUNDS_END(마지막 라운드 종료)부터 FINISH_END(완주)까지
+    // 서서히 걷는 속도(0.4배)까지 떨어진다.
+    if (G.clock >= RACE_ROUNDS_END) {
+      var arriveT = clamp((G.clock - RACE_ROUNDS_END) / (FINISH_END - RACE_ROUNDS_END), 0, 1);
+      G.speedMult = lerp(G.speedMult, 0.4, easeInOutCubic(arriveT));
+    }
     if (G.surge > 0) G.surge -= dt * 2.2;   // 서지 ~0.45s 감쇠
     G.travel += 9 * G.speedMult * dt * motionScale;
 
@@ -716,7 +740,7 @@
     }
 
     // 카드 approach 사운드
-    if (G.macro === 'RACE' && G.sub === 'APPROACH' && !G.round._approachSfx && G.rel > T_SPAWN + (T_APPROACH - T_SPAWN) * 0.55) {
+    if (G.macro === 'RACE' && G.sub === 'APPROACH' && !G.round._approachSfx && G.rel > G.tSpawn + (G.tApproach - G.tSpawn) * 0.55) {
       G.round._approachSfx = true; Audio.sfx('cardApproach');
     }
     if (G.macro === 'RACE' && G.sub === 'SPAWN') G.round._approachSfx = false;
@@ -736,9 +760,12 @@
     ];
     G.lampSpawn -= dt;
     if (G.lampSpawn <= 0 && G.macro !== 'CELEBRATION') {
-      G.lampSpawn = 1.0;
+      G.lampSpawn = 0.62;   // 배경 오브젝트 등장 빈도 증가(기존 1.0s -> 0.62s 간격)
       var pc = PROP_CYCLE[G.spawnSeq % PROP_CYCLE.length];
-      G.lamps.push({ z: 1500, side: (G.spawnSeq % 2 === 0) ? -1 : 1, type: pc.t, variant: pc.v || 0 });
+      // 사람(동료) 오브젝트 중 딱 한 번만 "이분 완전 맛잘알" 말풍선 노출
+      var showBubble = (pc.t === 'coworker' && !G.coworkerBubbleShown && G.macro === 'RACE');
+      if (showBubble) G.coworkerBubbleShown = true;
+      G.lamps.push({ z: 1500, side: (G.spawnSeq % 2 === 0) ? -1 : 1, type: pc.t, variant: pc.v || 0, bubble: showBubble });
       G.spawnSeq++;
     }
     // 소품 접근 속도: 속도배율에 완만하게 연동(급가속 완화)
@@ -907,7 +934,7 @@
       else if (lp.type === 'chair') drawPropChair(lp.z, lp.side);
       else if (lp.type === 'exit') drawPropExit(lp.z, lp.side);
       else if (lp.type === 'pillar') drawPropPillar(lp.z, lp.side);
-      else if (lp.type === 'coworker') drawPropCoworker(lp.z, lp.side, lp.variant);
+      else if (lp.type === 'coworker') drawPropCoworker(lp.z, lp.side, lp.variant, lp.bubble);
       else drawPropDoor(lp.z, lp.side);
     }
   }
@@ -1016,7 +1043,7 @@
     px(x0 - 1 * s, topY, w + 2 * s, 3 * s, '#d9d5c8');
     px(x0 - 1 * s, y - 3 * s, w + 2 * s, 3 * s, '#b0ab9a');
   }
-  function drawPropCoworker(z, dir, v) {   // 직장 동료 4종 — 벽 옆에 서 있는 빌보드
+  function drawPropCoworker(z, dir, v, bubble) {   // 직장 동료 4종 — 벽 옆에 서 있는 빌보드
     var y = HORIZON_Y - 2 + 2400 / z, s = clamp(60 / z, 0.05, 3.0);
     var edge = VPX + dir * roadHalfWidth(y);
     // 벽에서 살짝 안쪽(통로 가장자리)에 서 있게
@@ -1047,6 +1074,11 @@
     if (v === 1 || v === 3) px(cxp - 4 * s, top - 3 * s, 8 * s, 5 * s, pal.hair), px(cxp - 3 * s, top - 1 * s, 6 * s, 4 * s, '#f0c39a'); // 긴머리
     // 눈(정면)
     px(cxp - 2 * s, top - 1 * s, 1 * s, 1 * s, '#241b2f'); px(cxp + 1 * s, top - 1 * s, 1 * s, 1 * s, '#241b2f');
+
+    // 전체 동료 중 단 한 명에게만 노출되는 말풍선("이분 완전 맛잘알") — 충분히 커졌을 때만 표시
+    if (bubble && s > 0.55) {
+      OVERLAY.push({ bubble: true, text: '이분 완전 맛잘알', bx: cxp, by: top - 6 * s, size: 6 });
+    }
   }
 
   function drawRunner() {
@@ -1114,6 +1146,22 @@
     px(cx - 3, top, 6, 6, '#0d0b1a'); // 머리카락(검정, 아웃라인과 동일톤이라 형태만)
     px(cx - 3, top + 1, 6, 1, '#241b2f'); // 하이라이트 살짝
     bctx.restore();
+
+    drawDogCompanion(cx, footY);
+  }
+
+  // 3콤보 이상 유지 중일 때 캐릭터 옆에서 함께 달리는 강아지(Goldie_v02.png, 32px 셀 4프레임 러닝 사이클)
+  function drawDogCompanion(cx, footY) {
+    if (!DOG.img || G.stats.combo < 3) return;
+    var frame = Math.floor(G.runner.phase * 4) % 4;
+    var sx = frame * 32, sy = 32;   // row1 = 달리기 사이클
+    var dw = 13, dh = 13;
+    var bob = -Math.abs(Math.sin(G.runner.phase * Math.PI * 2)) * 1.6;
+    var dx = cx - 15, dy = footY - dh + 2 + bob;
+    bctx.globalAlpha = 0.35; bctx.fillStyle = '#241b2f';
+    bctx.beginPath(); bctx.ellipse(dx + dw / 2, footY, 5, 1.6, 0, 0, Math.PI * 2); bctx.fill(); bctx.globalAlpha = 1;
+    bctx.imageSmoothingEnabled = false;
+    bctx.drawImage(DOG.img, sx, sy, 32, 32, Math.round(dx), Math.round(dy), dw, dh);
   }
 
   // 성장을 앞당겨(front-load) 카드가 빨리 커지고 오래 읽힌다.
@@ -1121,7 +1169,7 @@
   var APPROACH_SPEED = 1.2;   // 메뉴 카드가 다가오는 속도 배율(기존보다 1.2배 빠르게 도달, 이후 게이트 크기로 유지)
   function cardYFor() {
     if (G.sub === 'SPAWN') return 74;
-    if (G.sub === 'APPROACH') { var p = clamp((G.rel - T_SPAWN) / (T_APPROACH - T_SPAWN) * APPROACH_SPEED, 0, 1); return lerp(74, GATE_Y, Math.pow(p, APPROACH_EASE)); }
+    if (G.sub === 'APPROACH') { var p = clamp((G.rel - G.tSpawn) / (G.tApproach - G.tSpawn) * APPROACH_SPEED, 0, 1); return lerp(74, GATE_Y, Math.pow(p, APPROACH_EASE)); }
     return GATE_Y;
   }
   function cardScaleFor(card) {
@@ -1185,7 +1233,7 @@
         if (!card.chosen) continue; // 진 카드는 파편으로 대체
         var cyC = GATE_Y - 32;
         if (G.sub === 'CARRY') {
-          var pc = clamp((G.rel - T_RESOLVE) / (T_CARRY - T_RESOLVE), 0, 1);
+          var pc = clamp((G.rel - G.tResolve) / (G.tCarry - G.tResolve), 0, 1);
           // 챔피언 칩으로 축소 이동
           var tx = 20, ty = 22;
           var sx = lerp(laneX(GATE_Y, card.lane), tx, pc), sy = lerp(cyC, ty, pc);
@@ -1204,8 +1252,8 @@
   }
 
   function drawFinish() {
-    // 구내식당 문 (완주 존)
-    var p = clamp((G.clock - RACE_ROUNDS_END) / 2, 0, 1);
+    // 구내식당 문 (완주 존). 확보된 도착 연출 시간(FINISH 구간) 전체에 걸쳐 서서히 다가온다.
+    var p = clamp((G.clock - RACE_ROUNDS_END) / (FINISH_END - RACE_ROUNDS_END), 0, 1);
     var cy = lerp(74, PLAYER_Y - 6, easeOutQuad(p));
     var hw = roadHalfWidth(cy);
     var s = roadHalfWidth(cy) / HW_PLAYER;
@@ -1282,6 +1330,13 @@
     // 라운드 카운터
     if (G.macro === 'RACE')
       OVERLAY.push({ text: 'ROUND ' + (G.roundIndex + 1) + ' / ' + RC, bx: VW - 10, by: 15, size: 6, color: '#fff8e7', align: 'right' });
+
+    // 우측 힌트: 3콤보 달성 전까지만 안내(달성 후에는 강아지가 직접 보여주므로 숨김)
+    if (G.macro === 'RACE' && G.stats.bestCombo < 3) {
+      OVERLAY.push({ text: '3콤보시', bx: VW - 4, by: 96, size: 5.5, color: '#ffe14d', align: 'right', outline: 0.18 });
+      OVERLAY.push({ text: '귀여운 강아지도', bx: VW - 4, by: 105, size: 5.5, color: '#f5f5ef', align: 'right', outline: 0.18 });
+      OVERLAY.push({ text: '함께 달려요', bx: VW - 4, by: 114, size: 5.5, color: '#f5f5ef', align: 'right', outline: 0.18 });
+    }
 
     // 챔피언 칩
     if (G.champion) {
