@@ -1106,42 +1106,58 @@
     }
   }
 
-  // 라운드가 진행될수록(라운드마다 1명씩) 주인공 뒤에서 함께 달리는 추격 무리.
-  // 플레이어보다 뒤(화면상 더 위쪽/작게)에 좌우로 퍼진 대열로 배치해 플레이어가 앞서가는 느낌을 준다.
-  var CHASER_OFFSETS = [
-    { dx: -20, dy: -3, s: 0.62 }, { dx: 20, dy: -3, s: 0.62 },
-    { dx: -33, dy: -9, s: 0.52 }, { dx: 33, dy: -9, s: 0.52 },
-    { dx: -12, dy: -13, s: 0.46 }, { dx: 12, dy: -13, s: 0.46 },
-    { dx: -42, dy: -17, s: 0.4 }, { dx: 42, dy: -17, s: 0.4 },
+  // 라운드가 진행될수록(라운드마다 1명씩) 함께 달리는 무리. 플레이어를 따라 좌우로 움직이지 않고
+  // 트랙에 '고정'된 자리에서 제자리 달리기 모션만 한다. 크기는 주인공 수준(≈31px).
+  // 카드(중앙 상단)를 가리지 않도록 좌우 측면 위주로 배치.
+  var CHASER_SLOTS = [
+    { x: 60, fy: 150, s: 2.3 }, { x: 260, fy: 150, s: 2.3 },
+    { x: 32, fy: 156, s: 2.5 }, { x: 288, fy: 156, s: 2.5 },
+    { x: 96, fy: 146, s: 2.0 }, { x: 224, fy: 146, s: 2.0 },
+    { x: 20, fy: 168, s: 2.7 }, { x: 300, fy: 168, s: 2.7 },
   ];
   var CHASER_PAL = [
-    { hair: '#3a2a1a', shirt: '#5a7fd6', low: '#241b2f' },
-    { hair: '#241b2f', shirt: '#ff9ab0', low: '#7b6d8d' },
-    { hair: '#7a4a2a', shirt: '#f5f5ef', low: '#46394f' },
-    { hair: '#0d0b1a', shirt: '#ffe14d', low: '#2e4a8f' },
+    { hair: '#3a2a1a', shirt: '#5a7fd6', low: '#241b2f', tie: '#ff6b6b' },
+    { hair: '#241b2f', shirt: '#ff9ab0', low: '#7b6d8d', tie: null },
+    { hair: '#7a4a2a', shirt: '#f5f5ef', low: '#46394f', tie: '#d43d3d' },
+    { hair: '#0d0b1a', shirt: '#ffe14d', low: '#2e4a8f', tie: null },
+    { hair: '#46394f', shirt: '#3fae6b', low: '#241b2f', tie: null },
   ];
-  function drawChaserPerson(cx, footY, s, pal, phase) {
-    var frame = Math.floor(phase * 2) % 2;
-    var bob = -Math.abs(Math.sin(phase * Math.PI * 2)) * 1.2 * s;
-    var fy = footY + bob, top = fy - 11 * s;
+  function drawChaserPerson(cx, fy0, s, pal, phase) {
+    var frame = Math.floor(phase * 4) % 4;   // 4프레임 달리기
+    var bob = -Math.abs(Math.sin(phase * Math.PI * 2)) * 1.4 * s;
+    var y = fy0 + bob, top = y - 13 * s;
+    // 그림자(제자리 고정 — 발 위치는 안 움직임)
     bctx.globalAlpha = 0.3; bctx.fillStyle = '#241b2f';
-    bctx.beginPath(); bctx.ellipse(cx, footY, 3.5 * s, 1.2 * s, 0, 0, Math.PI * 2); bctx.fill(); bctx.globalAlpha = 1;
-    var lift = frame === 0 ? [-1, 0] : [0, -1];
-    px(cx - 2 * s, fy - 4 * s + lift[0] * s, 1.6 * s, 4 * s, pal.low);
-    px(cx + 0.4 * s, fy - 4 * s + lift[1] * s, 1.6 * s, 4 * s, pal.low);
-    px(cx - 2.2 * s, top + 2 * s, 4.4 * s, 5 * s, '#0d0b1a');
-    px(cx - 1.8 * s, top + 2 * s, 3.6 * s, 4.4 * s, pal.shirt);
-    px(cx - 1.8 * s, top, 3.6 * s, 3.6 * s, pal.hair);
+    bctx.beginPath(); bctx.ellipse(cx, fy0, 4 * s, 1.4 * s, 0, 0, Math.PI * 2); bctx.fill(); bctx.globalAlpha = 1;
+    // 다리(달리는 모션)
+    var lift = (frame === 0) ? [-1.3, 0] : (frame === 2) ? [0, -1.3] : [-0.6, -0.6];
+    px(cx - 2.4 * s, y - 5 * s + lift[0] * s, 1.9 * s, 5 * s, pal.low);
+    px(cx + 0.5 * s, y - 5 * s + lift[1] * s, 1.9 * s, 5 * s, pal.low);
+    px(cx - 2.6 * s, y - 1 * s, 2.3 * s, 1.5 * s, '#241b2f');
+    px(cx + 0.5 * s, y - 1 * s, 2.3 * s, 1.5 * s, '#241b2f');
+    // 몸통
+    px(cx - 3.2 * s, top + 4 * s, 6.4 * s, 6 * s, '#0d0b1a');       // 아웃라인
+    px(cx - 2.6 * s, top + 4 * s, 5.2 * s, 5 * s, pal.shirt);
+    if (pal.tie) px(cx - 0.5 * s, top + 4.5 * s, 1 * s, 4 * s, pal.tie);
+    // 팔(스윙)
+    var arm = (frame === 0) ? [1, -1] : (frame === 2) ? [-1, 1] : [0, 0];
+    px(cx - 3.8 * s, top + 5 * s + arm[0] * s, 1.4 * s, 4.5 * s, pal.shirt);
+    px(cx + 2.4 * s, top + 5 * s + arm[1] * s, 1.4 * s, 4.5 * s, pal.shirt);
+    // 머리
+    px(cx - 2.4 * s, top - 0.5 * s, 4.8 * s, 4.8 * s, '#f0c39a');
+    px(cx - 2.4 * s, top - 1 * s, 4.8 * s, 2.8 * s, pal.hair);
   }
   function drawChasers() {
     if (G.macro === 'CELEBRATION') return;
-    var n = Math.min(CHASER_OFFSETS.length, Math.max(0, G.roundIndex));
+    var n = Math.min(CHASER_SLOTS.length, Math.max(0, G.roundIndex));
     if (n <= 0) return;
-    var cx = G.runner.x + G.runner.lean, footY = PLAYER_Y;
-    for (var i = 0; i < n; i++) {
-      var o = CHASER_OFFSETS[i];
-      var phase = (G.runner.phase + i * 0.23) % 1;
-      drawChaserPerson(cx + o.dx, footY + o.dy, o.s, CHASER_PAL[i % CHASER_PAL.length], phase);
+    var order = [];
+    for (var i = 0; i < n; i++) order.push(i);
+    order.sort(function (a, b) { return CHASER_SLOTS[a].fy - CHASER_SLOTS[b].fy; }); // 뒤(위)부터 그려 근경이 앞에
+    for (var k = 0; k < order.length; k++) {
+      var idx = order[k], o = CHASER_SLOTS[idx];
+      var phase = (G.runner.phase + idx * 0.31) % 1;   // 각자 다른 발 타이밍
+      drawChaserPerson(o.x, o.fy, o.s, CHASER_PAL[idx % CHASER_PAL.length], phase);
     }
   }
 
@@ -1219,11 +1235,11 @@
     if (!DOG.img || G.stats.combo < 3) return;
     var frame = Math.floor(G.runner.phase * 4) % 4;
     var sx = frame * 32, sy = 32;   // row1 = 달리기 사이클
-    var dw = 13, dh = 13;
-    var bob = -Math.abs(Math.sin(G.runner.phase * Math.PI * 2)) * 1.6;
-    var dx = cx - 15, dy = footY - dh + 2 + bob;
+    var dw = 16, dh = 16;   // 주인공(≈31px)의 절반 크기
+    var bob = -Math.abs(Math.sin(G.runner.phase * Math.PI * 2)) * 1.8;
+    var dx = cx - 19, dy = footY - dh + 2 + bob;
     bctx.globalAlpha = 0.35; bctx.fillStyle = '#241b2f';
-    bctx.beginPath(); bctx.ellipse(dx + dw / 2, footY, 5, 1.6, 0, 0, Math.PI * 2); bctx.fill(); bctx.globalAlpha = 1;
+    bctx.beginPath(); bctx.ellipse(dx + dw / 2, footY, 6, 1.9, 0, 0, Math.PI * 2); bctx.fill(); bctx.globalAlpha = 1;
     bctx.imageSmoothingEnabled = false;
     bctx.drawImage(DOG.img, sx, sy, 32, 32, Math.round(dx), Math.round(dy), dw, dh);
   }
@@ -1432,9 +1448,9 @@
 
     // 우측 힌트: 3콤보 달성 전까지만 안내(달성 후에는 강아지가 직접 보여주므로 숨김)
     if (G.macro === 'RACE' && G.stats.bestCombo < 3) {
-      OVERLAY.push({ text: '3콤보시', bx: VW - 4, by: 96, size: 5.5, color: '#ffe14d', align: 'right', outline: 0.18 });
-      OVERLAY.push({ text: '귀여운 강아지도', bx: VW - 4, by: 105, size: 5.5, color: '#f5f5ef', align: 'right', outline: 0.18 });
-      OVERLAY.push({ text: '함께 달려요', bx: VW - 4, by: 114, size: 5.5, color: '#f5f5ef', align: 'right', outline: 0.18 });
+      OVERLAY.push({ text: '3콤보', bx: VW - 4, by: 98, size: 5.5, color: '#ffe14d', align: 'right', outline: 0.18 });
+      OVERLAY.push({ text: '귀여운 강아지', bx: VW - 4, by: 107, size: 5.5, color: '#f5f5ef', align: 'right', outline: 0.18 });
+      OVERLAY.push({ text: '등장!', bx: VW - 4, by: 116, size: 5.5, color: '#f5f5ef', align: 'right', outline: 0.18 });
     }
 
     // 챔피언 칩
@@ -1519,19 +1535,12 @@
   }
 
   function drawTitleScreen() {
-    // 상단 WemadePlay 로고 배너 (검정 워드마크 → 밝은 사인 패널 위에)
-    if (LOGO.img) {
-      var lw = 100, lh = lw * LOGO.img.height / LOGO.img.width;
-      var bx0 = Math.round(VPX - lw / 2 - 4), by0 = 12, bw = Math.round(lw + 8), bh = Math.round(lh + 6);
-      px(bx0 - 1, by0 - 1, bw + 2, bh + 2, C_WOOD_LO);
-      px(bx0, by0, bw, bh, '#f5f5ef');
-      // 로고는 디스플레이에 원본 그대로 크리스프 렌더(도트화 없음)
-      OVERLAY.push({ face: LOGO.img, bx: VPX - lw / 2, by: by0 + 3, bw: lw, bh: lh });
-    }
+    // 상단 헤더 텍스트 (기존 WemadePlay 이미지 배너 제거 → 복도 끝 벽 로고와 겹치지 않게)
+    OVERLAY.push({ text: "개발명가 위메이드 플레이's 구내식당", bx: VPX, by: 30, size: 8, color: '#ffe14d', outline: 0.18, maxW: VW - 14 });
     // 타이틀
     OVERLAY.push({ text: '점심 뭐 먹지', bx: VPX, by: 58, size: 22, color: '#ffe14d', outline: 0.16 });
     OVERLAY.push({ text: '구내식당 런!', bx: VPX, by: 82, size: 17, color: '#ff6b6b', outline: 0.16 });
-    OVERLAY.push({ text: '3갈래 배식대, 레인을 골라 챔피언 메뉴를 지켜라', bx: VPX, by: 102, size: 6, color: '#f5f5ef' });
+    OVERLAY.push({ text: '레인을 골라 최고의 메뉴를 가리자!', bx: VPX, by: 102, size: 6, color: '#f5f5ef' });
     var blink = (Math.floor(G.clock2 * 2) % 2 === 0);
     if (blink) OVERLAY.push({ text: '클릭 · 탭 · [Space] 로 점심 러시 시작!', bx: VPX, by: 126, size: 8, color: '#3fae6b', outline: 0.16 });
     OVERLAY.push({ text: '← →  또는  A / D  로 레인 이동', bx: VPX, by: 142, size: 5.5, color: '#b9a9c9' });
