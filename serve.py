@@ -67,7 +67,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 {"slug": slug, "count": c, "pct": round((c / total) * 1000) / 10 if total else 0}
                 for slug, c in top
             ]
-            self._json({"ok": True, "total": total, "top": out})
+            self._json({"ok": True, "total": total, "top": out, "kv": True})
             return
         super().do_GET()
 

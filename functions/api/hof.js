@@ -16,7 +16,9 @@ function json(obj, status) {
 
 export async function onRequestGet({ env }) {
   try {
-    if (!env.HOF_KV) return json({ ok: true, total: 0, top: [] });
+    // kv 필드: KV 네임스페이스(HOF_KV) 바인딩 여부 진단용.
+    // 브라우저에서 https://<사이트>/api/hof 를 열어 "kv":false 이면 대시보드에서 KV 바인딩이 필요.
+    if (!env.HOF_KV) return json({ ok: true, total: 0, top: [], kv: false });
 
     const list = await env.HOF_KV.list({ prefix: 'wins:' });
     var rows = [];
@@ -33,9 +35,9 @@ export async function onRequestGet({ env }) {
       return { slug: r.slug, count: r.count, pct: total > 0 ? Math.round((r.count / total) * 1000) / 10 : 0 };
     });
 
-    return json({ ok: true, total: total, top: top });
+    return json({ ok: true, total: total, top: top, kv: true });
   } catch (e) {
-    return json({ ok: false, total: 0, top: [] }, 500);
+    return json({ ok: false, total: 0, top: [], kv: true, error: String(e) }, 500);
   }
 }
 

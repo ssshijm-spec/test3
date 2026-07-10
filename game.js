@@ -399,11 +399,15 @@
   /* 점심메뉴 명예의 전당 (서버: Cloudflare Pages Functions + KV)          */
   /* 서버가 아직 없거나(로컬) 응답이 없어도 게임 진행에는 전혀 영향 없음.  */
   /* ------------------------------------------------------------------ */
-  var HOF = { total: 0, top: [], loaded: false };
+  // state: 'loading'(아직 응답 전) | 'ok'(순위 있음) | 'empty'(연결O·기록X) | 'error'(연결 실패)
+  var HOF = { total: 0, top: [], state: 'loading' };
   function fetchHOF() {
     fetch('/api/hof').then(function (r) { return r.json(); }).then(function (d) {
-      if (d && d.ok !== false) { HOF.total = d.total || 0; HOF.top = d.top || []; HOF.loaded = true; }
-    }).catch(function () { /* 서버 미구성/오프라인이어도 조용히 무시 */ });
+      if (d && d.ok !== false) {
+        HOF.total = d.total || 0; HOF.top = d.top || [];
+        HOF.state = HOF.top.length ? 'ok' : 'empty';
+      } else { HOF.state = 'error'; }
+    }).catch(function () { HOF.state = 'error'; /* 함수 미배포/오프라인 */ });
   }
   function reportWin(slug) {
     fetch('/api/win', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ slug: slug }) })
@@ -1495,15 +1499,22 @@
 
   // 우측 상단, 라운드 카운터 바로 아래 — 화면 상태와 무관하게 항상 표시
   function drawHallOfFame() {
-    if (!HOF.loaded || !HOF.top.length) return;
+    if (HOF.state === 'loading') return;   // 응답 전 잠깐만 숨김
     var x = VW - 10, y = 26;
     OVERLAY.push({ text: '🏆 명예의 전당', bx: x, by: y, size: 5.5, color: '#ffe14d', align: 'right', outline: 0.18 });
-    for (var i = 0; i < HOF.top.length; i++) {
-      var r = HOF.top[i];
-      var menu = null;
-      for (var j = 0; j < CFG.FOODS.length; j++) { if (CFG.FOODS[j].slug === r.slug) { menu = CFG.FOODS[j]; break; } }
-      var label = (i + 1) + '위 ' + (menu ? menu.emoji + menu.name : r.slug) + ' ' + r.pct + '%';
-      OVERLAY.push({ text: label, bx: x, by: y + 8 + i * 7.5, size: 4.5, color: '#f5f5ef', align: 'right', maxW: 100, outline: 0.16 });
+    if (HOF.state === 'ok') {
+      for (var i = 0; i < HOF.top.length; i++) {
+        var r = HOF.top[i];
+        var menu = null;
+        for (var j = 0; j < CFG.FOODS.length; j++) { if (CFG.FOODS[j].slug === r.slug) { menu = CFG.FOODS[j]; break; } }
+        var label = (i + 1) + '위 ' + (menu ? menu.emoji + menu.name : r.slug) + ' ' + r.pct + '%';
+        OVERLAY.push({ text: label, bx: x, by: y + 8 + i * 7.5, size: 4.5, color: '#f5f5ef', align: 'right', maxW: 100, outline: 0.16 });
+      }
+    } else if (HOF.state === 'empty') {
+      OVERLAY.push({ text: '아직 우승 기록이 없어요', bx: x, by: y + 9, size: 4.5, color: '#d9d5c8', align: 'right', outline: 0.16 });
+      OVERLAY.push({ text: '완주하면 등록!', bx: x, by: y + 16, size: 4.5, color: '#d9d5c8', align: 'right', outline: 0.16 });
+    } else { // error
+      OVERLAY.push({ text: '랭킹 서버 연결 안됨', bx: x, by: y + 9, size: 4.5, color: '#ff9a9a', align: 'right', outline: 0.16 });
     }
   }
 
