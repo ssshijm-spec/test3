@@ -58,6 +58,39 @@
 
 ---
 
+## 🏆 점심메뉴 명예의 전당 (서버 연동)
+
+지금까지 모든 참여자의 우승 메뉴를 집계해, **1위~5위 메뉴와 선택 퍼센티지**를
+타이틀 화면과 우승 세리머니 화면 좌상단에 보여줍니다. 완주 시 클라이언트가
+자동으로 우승 메뉴를 서버에 전송하고, 그 즉시 최신 순위를 다시 불러옵니다.
+
+- **서버**: Cloudflare Pages Functions + Cloudflare KV (`functions/api/win.js`, `functions/api/hof.js`)
+- **API**
+  - `POST /api/win` — body `{ "slug": "jeyuk-bokkeum" }` → 해당 메뉴 우승 횟수 +1
+  - `GET /api/hof` — `{ ok, total, top: [{ slug, count, pct }, ...] }` (상위 5개, `pct`는 %)
+- 서버가 아직 없거나 응답이 없어도(로컬 개발, 배포 전 등) **게임 진행에는 전혀 영향 없이**
+  패널만 조용히 표시되지 않습니다.
+
+### Cloudflare 배포 시 1회 설정 필요
+
+1. [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages → KV** → **Create a namespace**
+   (이름 예: `lunch-hof`)
+2. 이 Pages 프로젝트 → **Settings → Functions → KV namespace bindings** → **Add binding**
+   - Variable name: `HOF_KV`
+   - KV namespace: 위에서 만든 네임스페이스
+   - Production, Preview 환경 둘 다 등록
+3. 다시 배포(재배포)하면 바로 동작합니다. (`functions/api/*.js` 는 Pages가 자동으로 인식해
+   배포하므로 별도 빌드 설정은 필요 없습니다.)
+
+### 로컬 개발 중 테스트
+
+`start.bat`(=`serve.py`)이 `/api/win`, `/api/hof` 를 **로컬 전용 목업**으로 흉내 내어
+(집계는 `hof_local.json`에 저장, git에는 포함되지 않음) Cloudflare 배포 없이도 명예의
+전당 동작을 바로 확인할 수 있습니다. 실제 배포본과는 완전히 별개이며, 로컬 파일을
+지우면 언제든 초기화됩니다.
+
+---
+
 ## 🗂 파일 구조
 
 ```
@@ -66,7 +99,8 @@ style.css        전체화면 픽셀 퍼펙트 셸 스타일
 config.js        ★ 사용자 편집: 메뉴 목록 + 사진 폴더 설정
 game.js          게임 엔진 (렌더/도로/러너/라운드/주스/오디오/HUD 전부)
 assets/menus/    ★ 음식 사진 폴더 ({slug}.png)
-serve.py         로컬 서버 (start.bat 이 호출)
+functions/api/   Cloudflare Pages Functions (명예의 전당 서버 API)
+serve.py         로컬 서버 (start.bat 이 호출, 명예의 전당 로컬 목업 포함)
 start.bat        더블클릭 실행
 ```
 
