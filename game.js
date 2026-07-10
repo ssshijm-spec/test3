@@ -158,14 +158,17 @@
     dctx.globalAlpha = 1;
   }
   // 캐릭터 말풍선(머리 위, 꼬리 아래). bx,by = 꼬리가 가리키는 지점(머리 위).
-  function drawBubble(text, bx, by, bpx, alpha) {
+  function drawBubble(text, bx, by, bpx, alpha, bias) {
     var fs = bpx * SCALE;
     dctx.font = fs + 'px ' + FONT;
     var tw = dctx.measureText(text).width;
     var padX = 5 * SCALE, padY = 3.5 * SCALE, r = 4 * SCALE;
     var w = tw + padX * 2, h = fs + padY * 2;
     var ax = mapX(bx), ay = mapY(by);
-    var bxr = ax - w / 2, byr = ay - 9 * SCALE - h;
+    // bias: 0=중앙(꼬리 가운데), -1=왼쪽으로 뻗음(꼬리 오른쪽), +1=오른쪽으로 뻗음(꼬리 왼쪽)
+    var tail = 6 * SCALE;
+    var bxr = (bias < 0) ? (ax - w + tail) : (bias > 0) ? (ax - tail) : (ax - w / 2);
+    var byr = ay - 9 * SCALE - h;
     bxr = Math.max(3 * SCALE, Math.min(display.width - w - 3 * SCALE, bxr));
     byr = Math.max(2 * SCALE, byr);
     dctx.globalAlpha = (alpha != null ? alpha : 1);
@@ -459,6 +462,7 @@
       macro: 'INTRO', sub: 'SPAWN', roundIndex: -1, rel: 0,
       roundLen: RLEN, tSpawn: RLEN * SUB_SPAWN_FRAC, tApproach: RLEN * SUB_APPROACH_FRAC, tPick: RLEN * SUB_PICK_FRAC, tResolve: RLEN * SUB_RESOLVE_FRAC, tCarry: RLEN,
       coworkerBubbleShown: false, dogFrame: 0,
+      chaserBubShown: { c0: false, c2: false, c4: false }, chaserBub: [],
       runner: { targetLane: 1, x: laneX(PLAYER_Y, 1), phase: 0, lean: 0, lastFrame: -1 },
       champion: null,
       round: { cards: [], resolved: false, champLanePrev: -1 },
@@ -719,6 +723,26 @@
     }
     if (G.announce) { G.announce.t += dt; if (G.announce.t > 1.9) G.announce = null; }
     if (G.bubble) { G.bubble.t += dt; if (G.bubble.t > 2.3) G.bubble = null; }
+
+    // 함께 달리는 사람 말풍선 트리거(각 1회) — 1번째:콤보3, 3번째:등장, 5번째:등장
+    if (G.macro === 'RACE') {
+      if (!G.chaserBubShown.c0 && G.stats.combo >= 3 && G.champion && G.roundIndex >= 1) {
+        G.chaserBubShown.c0 = true;
+        G.chaserBub.push({ idx: 0, text: G.champion.name + '을 고르다니 맛잘알', t: 0 });
+      }
+      if (!G.chaserBubShown.c2 && G.roundIndex >= 3) {
+        G.chaserBubShown.c2 = true;
+        G.chaserBub.push({ idx: 2, text: '점심은 제육이 국룰이지', t: 0 });
+      }
+      if (!G.chaserBubShown.c4 && G.roundIndex >= 5) {
+        G.chaserBubShown.c4 = true;
+        G.chaserBub.push({ idx: 4, text: '너무 배고파', t: 0 });
+      }
+    }
+    for (var cbi = G.chaserBub.length - 1; cbi >= 0; cbi--) {
+      G.chaserBub[cbi].t += dt;
+      if (G.chaserBub[cbi].t > 2.8) G.chaserBub.splice(cbi, 1);
+    }
 
     // 속도/스크롤/러너 애니메이션 (시각 전용: 라운드 타이밍은 clock 기반이라 영향 없음)
     var baseV = (G.macro === 'INTRO') ? 0.35 : speedMultAt(G.clock);
@@ -1106,14 +1130,19 @@
     }
   }
 
-  // 라운드가 진행될수록(라운드마다 1명씩) 함께 달리는 무리. 플레이어를 따라 좌우로 움직이지 않고
-  // 트랙에 '고정'된 자리에서 제자리 달리기 모션만 한다. 크기는 주인공 수준(≈31px).
-  // 카드(중앙 상단)를 가리지 않도록 좌우 측면 위주로 배치.
+  // 라운드마다 1명씩 늘어나는 함께 달리는 무리. 주인공(중앙 전방)보다 '뒤쪽(작은 y)'의
+  // 1·2·3 레인 안쪽에 여러 줄로 배치. 트랙에 고정(플레이어를 따라 움직이지 않음)되고 제자리 달리기.
+  // x는 그리는 시점에 laneX(fy, lane) 로 계산(레인 정중앙 정렬). 카드는 이보다 앞(나중)에 그려 안 가림.
+  // 말풍선 대상 인덱스(0=1번째, 2=3번째, 4=5번째)는 잘 보이도록 측면 레인에 둔다.
   var CHASER_SLOTS = [
-    { x: 60, fy: 150, s: 2.3 }, { x: 260, fy: 150, s: 2.3 },
-    { x: 32, fy: 156, s: 2.5 }, { x: 288, fy: 156, s: 2.5 },
-    { x: 96, fy: 146, s: 2.0 }, { x: 224, fy: 146, s: 2.0 },
-    { x: 20, fy: 168, s: 2.7 }, { x: 300, fy: 168, s: 2.7 },
+    { lane: 0, fy: 146, s: 2.0 },   // 1번째(좌) — 콤보3 말풍선
+    { lane: 2, fy: 146, s: 2.0 },   // 2번째(우)
+    { lane: 2, fy: 140, s: 1.72 },  // 3번째(우) — 등장 말풍선
+    { lane: 0, fy: 140, s: 1.72 },  // 4번째(좌)
+    { lane: 0, fy: 134, s: 1.5 },   // 5번째(좌) — 등장 말풍선
+    { lane: 2, fy: 134, s: 1.5 },   // 6번째(우)
+    { lane: 1, fy: 138, s: 1.62 },  // 7번째(중앙, 뒤)
+    { lane: 1, fy: 131, s: 1.42 },  // 8번째(중앙, 더 뒤)
   ];
   var CHASER_PAL = [
     { hair: '#3a2a1a', shirt: '#5a7fd6', low: '#241b2f', tie: '#ff6b6b' },
@@ -1147,6 +1176,10 @@
     px(cx - 2.4 * s, top - 0.5 * s, 4.8 * s, 4.8 * s, '#f0c39a');
     px(cx - 2.4 * s, top - 1 * s, 4.8 * s, 2.8 * s, pal.hair);
   }
+  function chaserBubbleFor(idx) {
+    for (var i = 0; i < G.chaserBub.length; i++) if (G.chaserBub[i].idx === idx) return G.chaserBub[i];
+    return null;
+  }
   function drawChasers() {
     if (G.macro === 'CELEBRATION') return;
     var n = Math.min(CHASER_SLOTS.length, Math.max(0, G.roundIndex));
@@ -1156,8 +1189,16 @@
     order.sort(function (a, b) { return CHASER_SLOTS[a].fy - CHASER_SLOTS[b].fy; }); // 뒤(위)부터 그려 근경이 앞에
     for (var k = 0; k < order.length; k++) {
       var idx = order[k], o = CHASER_SLOTS[idx];
+      var x = laneX(o.fy, o.lane);
       var phase = (G.runner.phase + idx * 0.31) % 1;   // 각자 다른 발 타이밍
-      drawChaserPerson(o.x, o.fy, o.s, CHASER_PAL[idx % CHASER_PAL.length], phase);
+      drawChaserPerson(x, o.fy, o.s, CHASER_PAL[idx % CHASER_PAL.length], phase);
+      var bub = chaserBubbleFor(idx);
+      if (bub) {
+        var ba = bub.t < 0.15 ? bub.t / 0.15 : (bub.t > 2.3 ? 1 - (bub.t - 2.3) / 0.5 : 1);
+        // 좌 레인은 왼쪽으로, 우 레인은 오른쪽으로 말풍선을 뻗어 중앙 플레이어 말풍선과 안 겹치게
+        var bias = o.lane === 0 ? -1 : o.lane === 2 ? 1 : 0;
+        OVERLAY.push({ bubble: true, text: bub.text, bx: x, by: o.fy - 13 * o.s - 9, size: 5.5, alpha: clamp(ba, 0, 1), bias: bias });
+      }
     }
   }
 
@@ -1599,8 +1640,10 @@
 
     if (G.macro === 'FINISH' || (G.macro === 'RACE' && G.clock > RACE_ROUNDS_END - 0.5)) drawFinish();
 
+    // 함께 달리는 무리는 주인공 뒤쪽 → 카드보다 먼저 그려 카드를 가리지 않게
+    if (G.macro !== 'CELEBRATION') drawChasers();
     if (G.started && G.macro === 'RACE') drawCards();
-    if (G.macro !== 'CELEBRATION') { drawChasers(); drawRunner(); }
+    if (G.macro !== 'CELEBRATION') drawRunner();
     drawSpeedLines();
     drawParticles();
 
@@ -1654,7 +1697,7 @@
         dctx.globalAlpha = 1; dctx.imageSmoothingEnabled = false;
         continue;
       }
-      if (o.bubble) { drawBubble(o.text, o.bx, o.by, o.size, o.alpha); continue; }
+      if (o.bubble) { drawBubble(o.text, o.bx, o.by, o.size, o.alpha, o.bias || 0); continue; }
       drawText(o.text, o.bx, o.by, o.size, o.color, { align: o.align, alpha: o.alpha, maxW: o.maxW, outline: o.outline, outlineColor: o.outlineColor, shadow: o.shadow });
     }
   }
